@@ -13,7 +13,9 @@
 #include <time.h>
 #include <dirent.h>
 #include <utime.h>
-
+#include <sys/types.h>
+#include <dirent.h>
+#include <libgen.h>
 
 void printUsage();
 void listFiles(int fd, int verbosity); // 0 for t; 1 for v
@@ -83,7 +85,7 @@ char*  str(char* buf, char* src,int size,int header){
 		}
 		buf[j++]=src[i++];
 	}
-	if (header==1) buf[i++]='/';
+	if (header==1 || buf[i-1] != '/') buf[i++]='/';
 	return buf;
 }
 
@@ -91,7 +93,7 @@ char*  str(char* buf, char* src,int size,int header){
 
 
 void listFiles(int fd, int verbosity) {
-	struct ar_hdr * file_header = malloc(sizeof(struct ar_hdr));
+	Header * file_header = malloc(sizeof(Header));
 
 	char buf[16];
 	char* ptr;
@@ -147,48 +149,41 @@ int append(int fd, char* filename) {
 	// fill informatin into the arHeader
 	// ar_name 
 	// str(arHeader->ar_name, filename, 16, 1);
-	memset(arHeader->ar_name, ' ', sizeof(arHeader->ar_name));
+	// memset(arHeader->ar_name, '\0', sizeof(arHeader->ar_name));
 	strcpy(arHeader->ar_name, filename);
-	// printf("%s\n", arHeader->ar_name);
 
 	// ar_date
-	memset(arHeader->ar_date, ' ', sizeof(arHeader->ar_date));
+	// memset(arHeader->ar_date, ' ', sizeof(arHeader->ar_date));
 	sprintf(buff, "%ld", fileInfo->st_mtime);
 	strcpy(arHeader->ar_date, buff);
 	// str(arHeader->ar_date, buff, 12, 0);
-	// printf("%s\n", arHeader->ar_date);
 
 	// ar_uid
-	memset(arHeader->ar_uid, ' ', sizeof(arHeader->ar_uid));
+	// memset(arHeader->ar_uid, ' ', sizeof(arHeader->ar_uid));
 	sprintf(buff, "%ld", (long) fileInfo->st_uid);
 	strcpy(arHeader->ar_uid, buff);
 	// str(arHeader->ar_uid, buff, 6, 0);
-	// printf("%s\n", arHeader->ar_uid);
 
 	// ar_gid
-	memset(arHeader->ar_gid, ' ', sizeof(arHeader->ar_gid));
+	// memset(arHeader->ar_gid, ' ', sizeof(arHeader->ar_gid));
 	sprintf(buff, "%ld", (long) fileInfo->st_gid);
 	strcpy(arHeader->ar_gid, buff);
 	// str(arHeader->ar_gid, buff, 6, 0);
-	// srtcpy()
-	// printf("%s\n", arHeader->ar_gid);
 
 	// ar_mode
-	memset(arHeader->ar_mode, ' ', sizeof(arHeader->ar_mode));
+	// memset(arHeader->ar_mode, ' ', sizeof(arHeader->ar_mode));
 	sprintf(buff, "%o", fileInfo->st_mode);
 	strcpy(arHeader->ar_mode, buff);
 	// str(arHeader->ar_mode, buff, 8, 0);
-	// printf("%s\n", arHeader->ar_mode);
 
 	// ar_size
-	memset(arHeader->ar_size, ' ', sizeof(arHeader->ar_size));
+	// memset(arHeader->ar_size, ' ', sizeof(arHeader->ar_size));
 	sprintf(buff, "%lld", fileInfo->st_size);
 	strcpy(arHeader->ar_size, buff);
 	// str(arHeader->ar_size, buff, 10, 0);
-	// printf("%s\n", arHeader->ar_size);
 
 	// ar_fmag
-	memset(arHeader->ar_fmag, ' ', sizeof(arHeader->ar_fmag));
+	// memset(arHeader->ar_fmag, ' ', sizeof(arHeader->ar_fmag));
 	strcpy(arHeader->ar_fmag, ARFMAG);
 	// str(arHeader->ar_fmag,ARFMAG,2,0);
 
@@ -228,8 +223,106 @@ void appendFiles(int fd, char** files, int numOfFiles) {
 	}
 }
 
-void appendAll(int fd, char** files) {
-	
+
+// what is fd in C, an int or ???
+void appendAll(int fd, char* selfName) {
+	DIR *dir;
+    struct dirent *direntP;
+
+    if ((dir = opendir (".")) == NULL) {
+        perror ("Cannot open the current directory.");
+        exit (1);
+    }
+
+    while ((direntP = readdir(dir)) != NULL) {
+    	if (direntP->d_type == DT_REG) {
+    		struct stat *fstat = (struct stat*) malloc(sizeof(struct stat));
+			stat(direntP->d_name, fstat);
+    		if ( difftime(time(NULL), fstat->st_mtime) <= 7200 ) {
+    			if (strcmp(direntP->d_name, selfName) != 0) {
+    				printf ("[%s]\n", direntP->d_name);
+    				append(fd, direntP->d_name);
+    			}
+    			// break;
+    		}
+    	}
+    }
+
+}
+
+
+
+
+void extract(int fd, char* archiveFile, char** files, int numOfFiles) {
+	Header *arHeader = malloc(sizeof(Header));
+	int i;
+	// printf("%d\n", fd);
+	// printf("%d\n", numOfFiles);
+	// printf("Welcome to extract PART.\n");
+
+	char to[sizeof(arHeader->ar_name)];
+	int find;
+	int fileSize;
+
+	for (i=0; i< numOfFiles; i++) {
+		find=-1;
+		while (next_file(fd, arHeader) != -1) {
+			str(to, arHeader->ar_name, sizeof(arHeader->ar_name), 0);
+			fileSize = (int) atoi(arHeader->ar_size);
+			if (strncmp(to, files[i], strlen(files[i])) == 0) {
+				find = 0;
+				break;
+			} else {
+				lseek(fd, fileSize, SEEK_CUR);
+			}
+
+			// printf("The file size of i is : %d\n", fileSize);
+			// printf("%s\n", to);
+
+		}
+		if (find == -1) {
+			printf("myar: %s: Not found in archive\n",files[i]);
+			continue;
+		}
+
+		// if found
+		char* ptr;
+		// follow original mode
+		mode_t mode = (mode_t) strtol(arHeader->ar_mode, &ptr, 8);
+		int ffd = creat(files[i], mode);
+		int n_read;
+
+		struct stat *f_stat = malloc(sizeof(struct stat));
+		fstat(fd, f_stat);
+		int buf_size = (int)f_stat->st_blksize;
+
+		// write the content 
+		while (fileSize>0) {
+			if (fileSize < buf_size) {
+				buf_size = fileSize;
+			} 
+			char* buf[buf_size];
+			if ((n_read=read(fd, buf, buf_size)) > 0) {
+				if (write(ffd, buf, n_read) != n_read) {
+					perror("write error");
+					exit(-1);
+				}
+			}
+			fileSize = fileSize - buf_size;
+		}
+
+		// restore timestamp 
+		time_t timestamp = atoll (arHeader->ar_date);
+		struct utimbuf* timebuf=(struct utimbuf*) malloc(sizeof(struct utimbuf));		timebuf->actime = timestamp;
+		timebuf->modtime = timestamp;
+		if(utime(files[i], timebuf) == -1) {
+			printf("Error in restoring timestamp.");
+			exit(-1);
+		}
+		free(timebuf);
+		lseek(fd,SARMAG,SEEK_SET);
+	}
+	free(arHeader);
 }
 
 
@@ -282,6 +375,7 @@ int main(int argc, char *argv[]) {
 			appendFiles(fd, files, argc-3);
 			break;
 		case 'x':
+			extract(fd, archiveFile, files, argc-3);
 			break;
 		case 't':
 			listFiles(fd, 0);
@@ -292,11 +386,15 @@ int main(int argc, char *argv[]) {
 		case 'd':
 			break;
 		case 'A':
+			appendAll(fd, archiveFile);
 			break;
 		default:
 			printf("wrong option %c; please look up the following instructions:\n", option);
 			printUsage();
 	}
+
+	close(fd);
+	exit(0);
 }
 
 

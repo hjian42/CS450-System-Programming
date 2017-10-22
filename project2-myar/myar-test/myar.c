@@ -224,6 +224,7 @@ int extract(char* afile,char** files,int size){
 	free(my_hdr);
 	return 0;
 }
+
 void print_mode(int digit){
 	switch(digit){
 		case 0: 
@@ -433,7 +434,6 @@ int main(int argc, char *argv[]) {
 		case 'v':
 			print(afile,1);
 			break;
-
 		case 'd':
 			delete(afile,files,argc-3);
 			break;
