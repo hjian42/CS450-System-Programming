@@ -1,0 +1,14 @@
+1. check mesmie: it works, use 0 instead of \0 maybe
+2. check how strncpy works: it does not guarantee a null terminator while strcpy does not promise enough space on the dest ptr side. abort 6 error
+3. implement x using the test code: I finished delete instead; I will focus on x later (Tuesday probably)
+4. print a string without ending \0
+5. Lesson: ALWAYS start with minimal example
+
+LATER THIS WEEK:
+
+1. rewrite every single piece of this hw later on Tuesday
+2. delete the current hw on the lab 
+3. remember to add unlink to the delete method
+
+
+
