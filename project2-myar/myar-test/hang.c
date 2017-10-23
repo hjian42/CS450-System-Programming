@@ -253,7 +253,7 @@ void appendAll(int fd, char* selfName) {
 
 
 
-void extract(int fd, char* archiveFile, char** files, int numOfFiles) {
+void extract(int fd, char** files, int numOfFiles) {
 	Header *arHeader = malloc(sizeof(Header));
 	int i;
 	// printf("%d\n", fd);
@@ -325,6 +325,110 @@ void extract(int fd, char* archiveFile, char** files, int numOfFiles) {
 	free(arHeader);
 }
 
+int readNext(int fd, Header* arHeader) {
+	int nread = read(fd, arHeader, sizeof(Header));
+	if (nread != sizeof(Header)) {
+		return -1;
+	}
+	return nread;
+}
+
+void handleString(char* buff, char* src, int size) {
+	memset(buff, 0, size);
+	sprintf(buff, "%.*s", size-1, src);
+	// printf("The saved string is: %s\n", buff);
+}
+
+void deleteFile(int fd, char* archiveFile, char* file) {
+	printf("WORKING on: %s\n", file);
+	Header *arHeader = malloc(sizeof(Header));
+
+	// get informatin of the archiveFile
+	struct stat *f_stat = malloc(sizeof(struct stat));
+	fstat(fd, f_stat);
+	int buf_size = (int)f_stat->st_blksize;
+
+	// create a new archiveFile and unlink 
+	int newfd;
+	// unlink(archiveFile);
+	if((newfd=creat("new.a", 0666))==-1) {
+		perror("Error in creating the archiveFile.");
+		exit(-1);
+	}
+	if(write(newfd, ARMAG, SARMAG) == -1) {
+		perror("Error in writing the archiveFile.");
+		exit(-1);
+	}
+
+	// variables used by while loop
+	char fname[sizeof(arHeader->ar_name)];
+	int fileSize;
+	int find = -1;
+	char buff[buf_size];
+	while(readNext(fd, arHeader) != -1) {
+		// print Eachfile information from arHeader
+		// printf("%.16s\n", arHeader->ar_name);
+		// printf("the size of the file is %lu\n", sizeof(arHeader->ar_name));
+		// handle the size of the matched file
+		fileSize = (int) atoi(arHeader->ar_size);		
+		if (fileSize%2==1) fileSize++; // because multiple of 2 is required for each memory space
+		handleString(fname, arHeader->ar_name, sizeof(arHeader->ar_name));
+		// printf("Targeted value is : %s, the size is %lu. \n", file, sizeof(file));
+		// printf("Returned value is : %s, the size is %lu. \n", fname, sizeof(fname));
+
+		// if matched, continue (skipping the writing of the file)
+		// fname contains many NULL terminators while file only has one NULL terminator
+		// strlen does not count NULL terminator
+		if ((strncmp(fname, file, strlen(file)) == 0) && (find == -1)) {
+			find = 0;
+			printf("FOUND THE FILE. %s\n", file);
+			lseek(fd, fileSize, SEEK_CUR);
+			continue;
+		}
+
+		// write the arHeader to the new archiveFile
+		if (write(newfd, arHeader, sizeof(Header)) == -1) {
+			perror("Error writing the header of archiveFile.");
+			exit(-1);
+		}
+		int nread;
+		while (fileSize > 0) {
+			if (fileSize < buf_size) {
+				buf_size = fileSize;
+			}
+			if ((nread=read(fd, buff, buf_size)) == buf_size) {
+				if(write(newfd, buff, buf_size) != buf_size) {
+					perror("Error writing the content of the archiveFile.");
+					exit(-1);
+				}
+			} 
+			fileSize -= buf_size;
+		}
+
+		
+		
+		// skip the content 
+		// break;
+	}
+
+	if (find == -1) {
+		printf("Myar: %s not found under the archive.\n", file);
+	} 
+
+
+
+	free(f_stat);
+	free(arHeader);
+}
+
+
+void delete(int fd, char* archiveFile, char** files, int numOfFiles) {
+	int i;
+	for (i=0; i < numOfFiles; i++) {
+		deleteFile(fd, archiveFile, files[i]);
+	}
+}
+
 
 int main(int argc, char *argv[]) {
 	if (argc < 3) {
@@ -375,7 +479,7 @@ int main(int argc, char *argv[]) {
 			appendFiles(fd, files, argc-3);
 			break;
 		case 'x':
-			extract(fd, archiveFile, files, argc-3);
+			extract(fd, files, argc-3);
 			break;
 		case 't':
 			listFiles(fd, 0);
@@ -384,6 +488,8 @@ int main(int argc, char *argv[]) {
 			listFiles(fd, 1);
 			break;
 		case 'd':
+			printf("doing delete command\n");
+			delete(fd, archiveFile, files, argc-3);
 			break;
 		case 'A':
 			appendAll(fd, archiveFile);
