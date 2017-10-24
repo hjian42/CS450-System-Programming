@@ -89,6 +89,29 @@ char*  str(char* buf, char* src,int size,int header){
 	return buf;
 }
 
+int readNext(int fd, Header* arHeader) {
+	int nread = read(fd, arHeader, sizeof(Header));
+	if (nread != sizeof(Header)) {
+		return -1;
+	}
+	return nread;
+}
+
+void handleString(char* buff, char* src, int size) {
+	memset(buff, '\0', size);
+	sprintf(buff, "%.*s", size-1, src);
+	// int i = 0;
+	// while ( i < size-1) {
+	// 	if (src[i] == ('\n')) {
+	// 		buff[i] = 'x';
+	// 		break;
+	// 	} else {
+	// 		buff[i] = src[i];
+	// 		i++;
+	// 	}
+	// }
+	// printf("The saved string is: %s\n", buff);
+}
 
 
 
@@ -119,6 +142,21 @@ void listFiles(int fd, int verbosity) {
 	}
 	free(file_header);
 
+}
+
+void showfiles(int fd, int verbosity) {
+	Header *arHeader = malloc(sizeof(Header));
+	char buff[16];
+	while(readNext(fd, arHeader) == sizeof(Header)) {
+		
+		handleString(buff, arHeader->ar_name, sizeof(arHeader->ar_name)); // sizeof works for fixed size arrary
+		printf("%s\n", buff);
+		int sizeOfContent = atoi(arHeader->ar_size);
+		if (sizeOfContent%2==1) sizeOfContent++;
+		lseek(fd, sizeOfContent, SEEK_CUR);
+	}
+
+	free(arHeader);
 }
 
 
@@ -325,19 +363,7 @@ void extract(int fd, char** files, int numOfFiles) {
 	free(arHeader);
 }
 
-int readNext(int fd, Header* arHeader) {
-	int nread = read(fd, arHeader, sizeof(Header));
-	if (nread != sizeof(Header)) {
-		return -1;
-	}
-	return nread;
-}
 
-void handleString(char* buff, char* src, int size) {
-	memset(buff, 0, size);
-	sprintf(buff, "%.*s", size-1, src);
-	// printf("The saved string is: %s\n", buff);
-}
 
 void deleteFile(int fd, char* archiveFile, char* file) {
 	printf("WORKING on: %s\n", file);
@@ -482,7 +508,7 @@ int main(int argc, char *argv[]) {
 			extract(fd, files, argc-3);
 			break;
 		case 't':
-			listFiles(fd, 0);
+			showfiles(fd, 0);
 			break;
 		case 'v':
 			listFiles(fd, 1);
