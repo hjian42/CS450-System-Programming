@@ -24,7 +24,143 @@ size_t buf_size;
 typedef struct ar_hdr Header;
 
 
-void print_mode(int digit){
+
+int readNext(int fd, Header* arHeader) {
+	int nread = read(fd, arHeader, sizeof(Header));
+	if (nread != sizeof(Header)) {
+		return -1;
+	}
+	return nread;
+}
+
+int handleString(char* buff, char* src, int size) {
+	memset(buff, '\0', size);
+	sprintf(buff, "%.*s", size-1, src);
+	int i = 0;
+	while ( i < size) {
+		if (buff[i] == ' ') {
+			break;
+		} else if (buff[i] == '\0') {
+			break;
+		} 
+		i++;
+	}
+	return i;
+}
+
+void extract(int fd, char** files, int numOfFiles) {
+	Header *arHeader = malloc(sizeof(Header));
+	
+	// printf("%d\n", fd);
+	// printf("%d\n", numOfFiles);
+	// printf("Welcome to extract PART.\n");
+	int i;
+	char fbuff[sizeof(arHeader->ar_name)];
+	int findflag;
+	int fileSize;
+
+	// handle extract for multiple files 
+	for (i=0; i< numOfFiles; i++) {
+		findflag=0;
+		// scan archive one pass to find each targeted file only
+		while (readNext(fd, arHeader) != -1) {
+			// if filename match: extract
+			int lengOfName = handleString(fbuff, arHeader->ar_name, sizeof(arHeader->ar_name));
+			fileSize = (int) atoi(arHeader->ar_size);
+			// printf("%s\n", fbuff);
+			// printf("%s\n", files[i]);
+			// printf("length of file is %d\n", lengOfName);
+			// checkpoint: 
+			// printf("%d\n", strncmp(fbuff, files[i], lengOfName));
+			if (strncmp(fbuff, files[i], lengOfName) == 0) {
+				findflag = 1;
+				break;
+			} else {
+				if (fileSize%2==1) fileSize++;
+				lseek(fd, fileSize, SEEK_CUR);
+			}
+		}
+
+		// if not found: continue with
+		if (findflag == 0) {
+			printf("File %s is not found in archive\n",files[i]);
+			continue;
+		}
+
+		// if found: extract the file
+		char* ptr;
+		// printf("MODE: %s\n", arHeader->ar_mode);
+		mode_t mode = (mode_t) strtol(arHeader->ar_mode, &ptr, 8);
+		// printf("MODE 2: %hu\n", mode);
+		int ffd = creat(files[i], mode);
+		int n_read;
+
+		struct stat *f_stat = malloc(sizeof(struct stat));
+		fstat(fd, f_stat);
+		int buf_size = (int)f_stat->st_blksize;
+
+		// write the content 
+		while (fileSize>0) {
+			if (fileSize < buf_size) {
+				buf_size = fileSize;
+			} 
+			char* buf[buf_size];
+			if ((n_read=read(fd, buf, buf_size)) > 0) {
+				if (write(ffd, buf, n_read) != n_read) {
+					perror("write error");
+					exit(-1);
+				}
+			}
+			fileSize = fileSize - buf_size;
+		}
+
+		// restore timestamp 
+		struct utimbuf* tbuff=(struct utimbuf*) malloc(sizeof(struct utimbuf));	
+		time_t timestamp = (time_t) atoll (arHeader->ar_date);
+		tbuff->modtime = timestamp;
+		tbuff->actime = timestamp;
+		if(utime(files[i], tbuff) == -1) {
+			printf("Error in restoring timestamp.");
+			exit(-1);
+		}
+		free(tbuff);
+		lseek(fd,SARMAG,SEEK_SET);
+	}
+	free(arHeader);
+}
+
+
+
+// void listFiles(int fd, int verbosity) {
+// 	Header * file_header = malloc(sizeof(Header));
+
+// 	char buf[16];
+// 	char* ptr;
+// 	char* tm;
+// 	while(next_file(fd,file_header)!=-1){
+// 		if(verbosity==1) {
+// 			mode_t mode=(mode_t) strtoll(file_header->ar_mode,&ptr,8);
+// 			permission(mode);
+// 			// str(buf,file_header->ar_uid,6,0);
+// 			// nospace(buf);
+// 			printf("%.6s", file_header->ar_uid);
+// 			printf("/");
+// 			printf("%.6s",file_header->ar_gid );
+// 			printf("%.10s",file_header->ar_size );
+// 			time_t timestamp = (time_t) atoi(file_header->ar_date);
+// 			tm=ctime(&timestamp);
+// 			printf("%.24s ",tm);
+// 		}
+// 		str(buf,file_header->ar_name,15,0);
+// 		printf("%s\n",buf);
+// 		int contentSize=atoi(file_header->ar_size); 
+// 		lseek(fd,contentSize,SEEK_CUR);
+// 	}
+// 	free(file_header);
+
+// }
+
+void decodeMode(int digit){
 	switch(digit){
 		case 0: 
 			printf("---");
@@ -53,100 +189,65 @@ void print_mode(int digit){
 	}
 }
 
-// understand why header structs are continuous here???
-int next_file(int fd, Header* my_hdr){
-	int read_size=read(fd,my_hdr,sizeof(Header));
-	if(read_size==-1 || read_size!=sizeof(Header)) return -1;
-	else return read_size;
-}
 
-// convert permission
-void permission(mode_t mode){
-	mode = mode % 512;
-	print_mode(mode/64);
-	mode = mode % 64;
-	print_mode(mode/8);
-	print_mode(mode%8);
-	printf("\t");
-}
-
-
-// build str; improvement of sprintf
-char*  str(char* buf, char* src,int size,int header){
-	int i = 0;
-	int j = 0;
-	while (i<size){
-		if (src[i]=='\0'||src[i]=='/'){
-			buf[i] = '\0';
-			break;
-		} else if (src[i] == '\n') {
-			i++;
-			continue;
-		}
-		buf[j++]=src[i++];
+void paddingPrint(char* buff, int paddingSize, int realSize) {
+	int i;
+	for (i=0; i < paddingSize; i++) {
+		printf(" ");
 	}
-	if (header==1 || buf[i-1] != '/') buf[i++]='/';
-	return buf;
-}
-
-int readNext(int fd, Header* arHeader) {
-	int nread = read(fd, arHeader, sizeof(Header));
-	if (nread != sizeof(Header)) {
-		return -1;
+	i = 0;
+	for (i=0; i < realSize; i++) {
+		printf("%c", buff[i]);
 	}
-	return nread;
 }
 
-void handleString(char* buff, char* src, int size) {
-	memset(buff, '\0', size);
-	sprintf(buff, "%.*s", size-1, src);
-	// int i = 0;
-	// while ( i < size-1) {
-	// 	if (src[i] == ('\n')) {
-	// 		buff[i] = 'x';
-	// 		break;
-	// 	} else {
-	// 		buff[i] = src[i];
-	// 		i++;
-	// 	}
-	// }
-	// printf("The saved string is: %s\n", buff);
-}
-
-
-
-void listFiles(int fd, int verbosity) {
-	Header * file_header = malloc(sizeof(Header));
-
-	char buf[16];
-	char* ptr;
-	char* tm;
-	while(next_file(fd,file_header)!=-1){
-		if(verbosity==1) {
-			mode_t mode=(mode_t) strtoll(file_header->ar_mode,&ptr,8);
-			permission(mode);
-			// str(buf,file_header->ar_uid,6,0);
-			// nospace(buf);
-			printf("%.6s", file_header->ar_uid);
-			printf("/");
-			printf("%.6s",file_header->ar_gid );
-			printf("%.10s",file_header->ar_size );
-			time_t timestamp = (time_t) atoi(file_header->ar_date);
-			tm=ctime(&timestamp);
-			printf("%.24s ",tm);
-		}
-		str(buf,file_header->ar_name,15,0);
-		printf("%s\n",buf);
-		int contentSize=atoi(file_header->ar_size); 
-		lseek(fd,contentSize,SEEK_CUR);
-	}
-	free(file_header);
-
-}
-
-void showfiles(int fd, int verbosity) {
+void showDetailfiles(int fd) {
 	Header *arHeader = malloc(sizeof(Header));
 	char buff[16];
+	char* pt;
+	char* date;
+	while(readNext(fd, arHeader) == sizeof(Header)) {
+		// print mode
+		mode_t mode = (mode_t) strtoll(arHeader->ar_mode, &pt, 8);
+		mode = mode % 512; // check the first digit
+		decodeMode(mode/64);
+		mode = mode % 64;
+		decodeMode(mode/8); // check the second digit
+		decodeMode(mode % 8); // check the last digit
+
+		int size;
+		// print two ids gid and uid
+		size = handleString(buff, arHeader->ar_uid, 6);
+		paddingPrint(buff, 6-size, size);		
+
+		printf("/");
+		size = handleString(buff, arHeader->ar_gid, 6);
+		paddingPrint(buff, 0, size);
+
+		// print file size
+		size = handleString(buff, arHeader->ar_size, 10);
+		paddingPrint(buff, 10-size, size);
+
+		// print date 
+		time_t timestamp = (time_t) atoi(arHeader->ar_date);
+		date = ctime(&timestamp);
+		paddingPrint(date, 1, 24);
+
+		// print filename
+		handleString(buff, arHeader->ar_name, sizeof(arHeader->ar_name)); // sizeof works for fixed size arrary
+		printf(" %s\n", buff);
+		int sizeOfContent = atoi(arHeader->ar_size);
+		if (sizeOfContent%2==1) sizeOfContent++;
+		lseek(fd, sizeOfContent, SEEK_CUR);
+	}
+	free(arHeader);
+}
+
+
+void showfiles(int fd) {
+	Header *arHeader = malloc(sizeof(Header));
+	char buff[16];
+	char* ptr;
 	while(readNext(fd, arHeader) == sizeof(Header)) {
 		
 		handleString(buff, arHeader->ar_name, sizeof(arHeader->ar_name)); // sizeof works for fixed size arrary
@@ -155,7 +256,6 @@ void showfiles(int fd, int verbosity) {
 		if (sizeOfContent%2==1) sizeOfContent++;
 		lseek(fd, sizeOfContent, SEEK_CUR);
 	}
-
 	free(arHeader);
 }
 
@@ -182,54 +282,44 @@ int append(int fd, char* filename) {
 		exit(-1);
 	}
 
-	char buff[17];
+	char buff[16];
+	// memset(buff, '\0', 16);
 
 	// fill informatin into the arHeader
+	// good things about them: stat() function handles the string ending for each variable inside
+	// our arHeader didn't because we brutely read it wtihout handling those strings well
+	// so we dont need to use stringHandle even
 	// ar_name 
-	// str(arHeader->ar_name, filename, 16, 1);
-	// memset(arHeader->ar_name, '\0', sizeof(arHeader->ar_name));
-	strcpy(arHeader->ar_name, filename);
+	strcpy(arHeader->ar_name, filename); //because this filename definitely has a ending character
 
 	// ar_date
-	// memset(arHeader->ar_date, ' ', sizeof(arHeader->ar_date));
-	sprintf(buff, "%ld", fileInfo->st_mtime);
+	sprintf(buff, "%ld", fileInfo->st_mtime); 
 	strcpy(arHeader->ar_date, buff);
-	// str(arHeader->ar_date, buff, 12, 0);
 
 	// ar_uid
-	// memset(arHeader->ar_uid, ' ', sizeof(arHeader->ar_uid));
 	sprintf(buff, "%ld", (long) fileInfo->st_uid);
 	strcpy(arHeader->ar_uid, buff);
-	// str(arHeader->ar_uid, buff, 6, 0);
 
 	// ar_gid
-	// memset(arHeader->ar_gid, ' ', sizeof(arHeader->ar_gid));
 	sprintf(buff, "%ld", (long) fileInfo->st_gid);
 	strcpy(arHeader->ar_gid, buff);
-	// str(arHeader->ar_gid, buff, 6, 0);
 
 	// ar_mode
-	// memset(arHeader->ar_mode, ' ', sizeof(arHeader->ar_mode));
 	sprintf(buff, "%o", fileInfo->st_mode);
 	strcpy(arHeader->ar_mode, buff);
 	// str(arHeader->ar_mode, buff, 8, 0);
 
 	// ar_size
-	// memset(arHeader->ar_size, ' ', sizeof(arHeader->ar_size));
 	sprintf(buff, "%lld", fileInfo->st_size);
 	strcpy(arHeader->ar_size, buff);
 	// str(arHeader->ar_size, buff, 10, 0);
 
 	// ar_fmag
-	// memset(arHeader->ar_fmag, ' ', sizeof(arHeader->ar_fmag));
 	strcpy(arHeader->ar_fmag, ARFMAG);
 	// str(arHeader->ar_fmag,ARFMAG,2,0);
 
-	// write arHeader to the archiveFile
-	// lseek(fd, 0, SEEK_END);
-
 	// write header
-	int n_read = write(fd, (char*) arHeader, sizeof(Header));
+	int n_read = write(fd, arHeader, sizeof(Header)); // sizeof(Header) != sizeof(arHeader); sizeof(arHeader is small because it has /0 in the middle)
 	if( n_read != sizeof(Header)) {
 		perror("Error writing the header.");
 		exit(-1);
@@ -237,20 +327,23 @@ int append(int fd, char* filename) {
 
 	// write the content 
 	int fd_file = open(filename, O_RDONLY);
-	char fileBuff[fileInfo->st_blksize];
-	while ((n_read=read(fd_file, fileBuff, fileInfo->st_blksize)) > 0) {
-		if (write(fd, fileBuff, n_read) != n_read) {
+	int sizeOfContent = (int)fileInfo->st_blksize;
+	char fbuff[sizeOfContent];
+	while ((n_read=read(fd_file, fbuff, sizeOfContent)) > 0) {
+		// printf("%d\n", n_read);
+		if (write(fd, fbuff, n_read) != n_read) {
 			perror("Error writing the file.");
 			exit(-1);
 		}
 		if ((lseek(fd, 0, SEEK_END) % 2) == 1) write(fd, "\n", 1);
 	}
-	// write(fd, "\n", 1);
+
 	free(fileInfo);
 	free(arHeader);
 
 	return 0;
 }
+
 
 // I cannot use char*[] here, values do not automatically copy to the new array???
 void appendFiles(int fd, char** files, int numOfFiles) {
@@ -262,7 +355,6 @@ void appendFiles(int fd, char** files, int numOfFiles) {
 }
 
 
-// what is fd in C, an int or ???
 void appendAll(int fd, char* selfName) {
 	DIR *dir;
     struct dirent *direntP;
@@ -288,80 +380,6 @@ void appendAll(int fd, char* selfName) {
 
 }
 
-
-
-
-void extract(int fd, char** files, int numOfFiles) {
-	Header *arHeader = malloc(sizeof(Header));
-	int i;
-	// printf("%d\n", fd);
-	// printf("%d\n", numOfFiles);
-	// printf("Welcome to extract PART.\n");
-
-	char to[sizeof(arHeader->ar_name)];
-	int find;
-	int fileSize;
-
-	for (i=0; i< numOfFiles; i++) {
-		find=-1;
-		while (next_file(fd, arHeader) != -1) {
-			str(to, arHeader->ar_name, sizeof(arHeader->ar_name), 0);
-			fileSize = (int) atoi(arHeader->ar_size);
-			if (strncmp(to, files[i], strlen(files[i])) == 0) {
-				find = 0;
-				break;
-			} else {
-				lseek(fd, fileSize, SEEK_CUR);
-			}
-
-			// printf("The file size of i is : %d\n", fileSize);
-			// printf("%s\n", to);
-
-		}
-		if (find == -1) {
-			printf("myar: %s: Not found in archive\n",files[i]);
-			continue;
-		}
-
-		// if found
-		char* ptr;
-		// follow original mode
-		mode_t mode = (mode_t) strtol(arHeader->ar_mode, &ptr, 8);
-		int ffd = creat(files[i], mode);
-		int n_read;
-
-		struct stat *f_stat = malloc(sizeof(struct stat));
-		fstat(fd, f_stat);
-		int buf_size = (int)f_stat->st_blksize;
-
-		// write the content 
-		while (fileSize>0) {
-			if (fileSize < buf_size) {
-				buf_size = fileSize;
-			} 
-			char* buf[buf_size];
-			if ((n_read=read(fd, buf, buf_size)) > 0) {
-				if (write(ffd, buf, n_read) != n_read) {
-					perror("write error");
-					exit(-1);
-				}
-			}
-			fileSize = fileSize - buf_size;
-		}
-
-		// restore timestamp 
-		time_t timestamp = atoll (arHeader->ar_date);
-		struct utimbuf* timebuf=(struct utimbuf*) malloc(sizeof(struct utimbuf));		timebuf->actime = timestamp;
-		timebuf->modtime = timestamp;
-		if(utime(files[i], timebuf) == -1) {
-			printf("Error in restoring timestamp.");
-			exit(-1);
-		}
-		free(timebuf);
-		lseek(fd,SARMAG,SEEK_SET);
-	}
-	free(arHeader);
-}
 
 
 
@@ -431,17 +449,11 @@ void deleteFile(int fd, char* archiveFile, char* file) {
 			fileSize -= buf_size;
 		}
 
-		
-		
-		// skip the content 
-		// break;
 	}
 
 	if (find == -1) {
-		printf("Myar: %s not found under the archive.\n", file);
+		printf("File %s not found under the archive.\n", file);
 	} 
-
-
 
 	free(f_stat);
 	free(arHeader);
@@ -484,7 +496,7 @@ int main(int argc, char *argv[]) {
 		magic[8] = '\0';
 		read(fd, magic, 8);
 		if(strcmp(magic, ARMAG) != 0){
-			printf("Error: File not recorgnized\n");
+			printf("Error: File not recognized\n");
 			close(fd); // why do we have to close it? 
 			exit(-1);
 		}
@@ -508,10 +520,10 @@ int main(int argc, char *argv[]) {
 			extract(fd, files, argc-3);
 			break;
 		case 't':
-			showfiles(fd, 0);
+			showfiles(fd);
 			break;
 		case 'v':
-			listFiles(fd, 1);
+			showDetailfiles(fd);
 			break;
 		case 'd':
 			printf("doing delete command\n");
