@@ -18,7 +18,7 @@
 #include <libgen.h>
 
 void printUsage();
-void listFiles(int fd, int verbosity); // 0 for t; 1 for v
+typedef struct ar_hdr Header;
 
 
 
