@@ -356,8 +356,8 @@ void appendAll(int fd, char* selfName) {
 			// 	continue;
 			// }
     		if ( difftime(time(NULL), fstat->st_mtime) <= 7200 ) {
-    			printf ("[%s]\n", direntP->d_name);
     			if ((strncmp(direntP->d_name, selfName, strlen(selfName))) != 0) {
+    				printf ("[%s]\n", direntP->d_name);
     				// printf("[%s]\n", selfName);
     				append(fd, direntP->d_name);
     			}
