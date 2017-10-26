@@ -1,6 +1,6 @@
 // THIS CODE IS MY OWN WORK, IT WAS WRITTEN WITHOUT CONSULTING A TUTOR OR CODE WRITTEN BY OTHER STUDENTS - Hang Jiang
 
-// command: myar option archiveName files
+// THIS VERSION IS ONLY TO STORE MY QUESTIONS: THIS VERSION DOES NOT WORK. THE FINAL VERSION IS MYAR.C
 #include <stdio.h>
 #include <stdlib.h>
 #include<fcntl.h>
