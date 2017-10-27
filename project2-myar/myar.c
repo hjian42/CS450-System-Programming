@@ -58,11 +58,11 @@ void extract(int fd, char** files, int numOfFiles) {
 		// scan archive one pass to find each targeted file only
 		while (readNext(fd, arHeader) != -1) {
 			// if filename match: extract
-			int lengOfName = handleString(fbuff, arHeader->ar_name, sizeof(arHeader->ar_name));
+			handleString(fbuff, arHeader->ar_name, sizeof(arHeader->ar_name));
 			fileSize = (int) atoi(arHeader->ar_size);
 			// printf("%d\n", (int)fileSize);
 			// printf("%s\n", arHeader->ar_size);
-			if (strncmp(fbuff, files[i], lengOfName) == 0) {
+			if (strncmp(fbuff, files[i], strlen(files[i])) == 0) {
 				findflag = 1;
 				break;
 			} else {
@@ -260,7 +260,7 @@ int append(int fd, char* file) {
 	memset(filename, ' ', 16);
 	// printf("The shown length of the input file: %lu\n", strlen(file)); 
 	strcpy(filename, file);
-	filename[strlen(file)] = ' '; // turn ending char into space
+	filename[strlen(file)] = '/'; // turn ending char into space
 	// printf("stored info: %s\n", filename);
 	
 	// fill informatin into the arHeader
@@ -279,29 +279,6 @@ int append(int fd, char* file) {
 	sprintf(arHeader->ar_mode,"%-8o",fileInfo->st_mode);
 	sprintf(arHeader->ar_size,"%-10lld",fileInfo->st_size);
 	sprintf(arHeader->ar_fmag,"%-2s",ARFMAG);
-
-	// ar_uid
-	// memset(buff, ' ', 16);
-	// sprintf(buff, "%ld", (long) fileInfo->st_uid);
-	// strncpy(arHeader->ar_uid, buff, sizeof(arHeader->ar_uid));
-
-	// ar_gid
-	// memset(buff, ' ', 16);
-	// sprintf(buff, "%ld", (long) fileInfo->st_gid);
-	// strncpy(arHeader->ar_gid, buff, sizeof(arHeader->ar_gid));
-
-	// ar_mode
-	// memset(buff, ' ', 16);
-	// sprintf(buff, "%o", fileInfo->st_mode);
-	// strncpy(arHeader->ar_mode, buff, sizeof(arHeader->ar_mode));
-
-	// ar_size
-	// memset(buff, ' ', 16);
-	// sprintf(buff, "%lld", fileInfo->st_size);
-	// strncpy(arHeader->ar_size, buff, sizeof(arHeader->ar_size));
-
-	// ar_fmag
-	// strncpy(arHeader->ar_fmag, ARFMAG, sizeof(arHeader->ar_fmag));
 
 	// write header
 	int n_read = write(fd, arHeader, sizeof(Header)); // sizeof(Header) != sizeof(arHeader); sizeof(arHeader is small because it has /0 in the middle)
