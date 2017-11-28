@@ -10,7 +10,7 @@ Report's job is to read the shared memory segement and report on the perfect num
 
 The shared memory segment should contain the following data:
   - a bit map large enough to contain 2\*\*25 bits. If a bit is off it inficates that the corresponding integer has not been tested. 
-  - an array of integers of length 20 to contain the perfect numbers found.
+  - an array of integers of length 20 to contain the perfect numbers found.
   - an array of process structures of length 20, to summarize data on the currently active compute processes. This structure soudl contain the pid, the number of perfect number found, the number of candiates tested, and the number of candiateds not tested (ie. skipped). Compute should never test a number already marked in the bitmap. 
   
 Compute processes are responsible for updating the bitmap, as well as their own process statistics. However, because of the possible conflicts, manager must initialize their process entry for each compute process. You may use your favorite IPC sheme for compute registering itself with manager. Similary, compute must request manager update the array of perfect numbers, when it finds one. 
@@ -18,3 +18,5 @@ Compute processes are responsible for updating the bitmap, as well as their own 
 Processes that hit the end should wrap around, but stop at their starting point. All processes should terminate cleanly on INTR, QUIT, and HANGUP signals. For compute processes this means they delete their process entry from the shared memory segement and then terminate. For manager it means he sends an INTR signal to all the running computes, sleep 5s, and then deallocates the shared memory segment and terminates. 
 
 When -k flag is used on report, report sends an INTR to manager to force the same shutdown procedure.
+
+So that there are no conflicts between users, use the last 5 digits of your phone number as a key for the shared memory segment. Also so as not use up unnecessary resources during the debugging phase, use the ps, ipcs, and ipcrm commands to make sure you have not left extraneous processes or shared memory segments allocated. 
