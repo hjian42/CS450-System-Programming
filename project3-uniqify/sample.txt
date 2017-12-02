@@ -1,0 +1,1 @@
+Internally, the program would be organized into 3 processes. A single process reads the input parsing the lines into words. Another process does the sorting, and a single process supresses duplicate words and writes the output. You should organize the processes so that every parent waits for its children.
