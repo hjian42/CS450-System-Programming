@@ -4,6 +4,7 @@ OR CODE WRITTEN BY OTHER STUDENTS - Hang Jiang*/
 #include "share.h"
 
 sharedMemory_struct *shmem;
+message_struct *msg_buffer;
 int shmID;
 int msgID;
 
@@ -18,9 +19,10 @@ void testEmpty(int idxOfProcess){
 
 
 void initialize_shared_memory() {
-	memset(shmem->bitmap, '\0', sizeof(shmem->bitmap));
-	memset(shmem->perfectNumsFound, '\0', sizeof(shmem->perfectNumsFound));
-	memset(shmem->processes, '\0' , sizeof(shmem->processes));
+	memset(shmem, 0, sizeof(sharedMemory_struct));
+	// memset(shmem->bitmap, '\0', sizeof(shmem->bitmap));
+	// memset(shmem->perfectNumsFound, '\0', sizeof(shmem->perfectNumsFound));
+	// memset(shmem->processes, '\0' , sizeof(shmem->processes));
 	shmem->manager_pid = getpid();
 
 	// test 
@@ -28,7 +30,7 @@ void initialize_shared_memory() {
 	
 } 
 
-void handler_killAll(int sig)
+void terminateAll(int sig)
 {
     // printf("%s\n", "KILLLLLLLLLLING IS FUN.");
 
@@ -46,6 +48,9 @@ void handler_killAll(int sig)
 	shmctl(shmID, IPC_RMID, NULL);
 	// kill message queue
 	msgctl(msgID, IPC_RMID, NULL);
+
+	// free buffer
+	free(msg_buffer);
 
 	exit(0);
 }
@@ -67,7 +72,7 @@ int main(int argc, char *argv[]){
 
 	// handle signals
 	struct sigaction act; //sigaction object to handle signals
-	act.sa_handler = handler_killAll;
+	act.sa_handler = terminateAll;
 	if (sigaction(SIGINT, &act, NULL) == -1) {
         perror("sigaction error");
         exit(1);
@@ -88,9 +93,7 @@ int main(int argc, char *argv[]){
     }
 
     // malloc space for message
-    message_struct *msg_buffer;
     msg_buffer = malloc(sizeof(message_struct)); // use msg_buffer as pointer
-
     // alternative way of msg
     // message_struct msg_buffer; // use &msg_buffer later as pointer
 
@@ -110,55 +113,45 @@ int main(int argc, char *argv[]){
             exit(1);
         }
 
-    	printf("Message Received is: type:%-10ldcontent:%-10dsize:%-10d\n", msg_buffer->msg_type, msg_buffer->content, nread);
+    	// printf("Message Received is: type:%-10ldcontent:%-10dsize:%-10d\n", msg_buffer->msg_type, msg_buffer->content, nread);
 
     	// check the msg type
-    	int j;
-    	if (msg_buffer->msg_type == PERFECT_MSG) { // register message
-    		printf("message is: type %ld\n", msg_buffer->msg_type);
-    		for (j=0;j<20;j++) {
-    			if(shmem->processes[j].pid == 0) {
-    				shmem->processes[j].pid = msg_buffer->content;
-    				break;
-    			}
+    	if (msg_buffer->msg_type == REGISTER_MSG) { // register message
+    		// update pid
+    		if (shmem->processNumber < 20) {
+    			shmem->processes[shmem->processNumber].pid = msg_buffer->content;
+    		} else {
+    			printf("20 processes already, full!\n");
+    			break;
     		}
-    		// if more than 20 processes: quit
-    		// if (j>20) {
-    		// 	printf("20 processes already, full!\n");
-    		// 	break;
-    		// }
-    			
 
     		// update processIndex to compute process
     		msg_buffer->msg_type = PROCESS_INDEX_MSG; // type 3: process index
-    		msg_buffer->content = j;
+    		msg_buffer->content = shmem->processNumber++;
     		msgsnd(msgID, msg_buffer, sizeof(msg_buffer->content), 0);
     	} 
-    	else if (msg_buffer->msg_type == REGISTER_MSG) { // content message
-    		printf("%ld\n", msg_buffer->msg_type);
-
-    		// remove duplicates
-
-
+    	else if (msg_buffer->msg_type == PERFECT_MSG) { // content message
     		// update the perfect number if it is new
+    		int j;
     		for (j=0;j<20;j++) {
+    			// avoid duplicates
+    			if (shmem->perfectNumsFound[j] == msg_buffer->content)
+    				break;
     			if(shmem->perfectNumsFound[j] == 0) {
     				shmem->perfectNumsFound[j] = msg_buffer->content;
     				break;
     			}
     		}
-    		// if (j>20) {
-    		// 	printf("20 perfect numbers already, full!\n");
-    		// 	break;
-    		// }
+    		if (j>=20) {
+    			printf("20 perfect numbers already, full!\n");
+    			break;
+    		}
     	} 
     	
     }
 
+    terminateAll(0);
 
-
-	
-    return 0;
 }
 
 

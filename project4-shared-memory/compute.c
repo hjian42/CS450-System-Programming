@@ -3,6 +3,7 @@ OR CODE WRITTEN BY OTHER STUDENTS - Hang Jiang*/
 
 #include "share.h"
 sharedMemory_struct *shmem;
+message_struct *msg_buffer;
 int shmID;
 int msgID;
 int idxOfProcess;
@@ -15,8 +16,7 @@ int isPerfect(int curr) {
 	int i;
 	for (i=2;i<curr/2+1;i++)
 		if (!(curr%i)) sum+=i; 
-	if (sum == curr) return 1;
-	return 0;
+	return sum == curr;
 }
 
 // test whether the process is emptied
@@ -34,6 +34,12 @@ void terminate(int sig){
 	// erase record on shared memory
 	memset(&shmem->processes[idxOfProcess], 0, sizeof(process_struct));
 	
+	// detach share memory
+	if (shmID != -1)
+		shmdt(shmem);
+
+	// free buffer
+	free(msg_buffer);
 	// test empty
 	// testEmpty();
 
@@ -50,6 +56,12 @@ int main(int argc, char* argv[]) {
 	} else {
 		start = atoi(argv[1]);
 	}
+
+	if(start > BITSIZE*32 + 1){
+		printf("The start number is too big.\n");
+		exit(1);
+	}
+
 
 	// signal handler
 	struct sigaction act; //sigaction object to handle signals
@@ -73,11 +85,10 @@ int main(int argc, char* argv[]) {
 
 	// connect to message queue
 	msgID = msgget(QKEY, 0666);
-    message_struct *msg_buffer;
     msg_buffer = malloc(sizeof(message_struct));
 
     // send the reigster message at type 1
-    msg_buffer->msg_type = PERFECT_MSG;
+    msg_buffer->msg_type = REGISTER_MSG;
     msg_buffer->content = getpid();
     int nread = msgsnd(msgID,msg_buffer,sizeof(msg_buffer->content),0);
 
@@ -87,7 +98,12 @@ int main(int argc, char* argv[]) {
 
 	// find perfect numbers in a loop 
 	int curr = start;
-	while (1) {
+
+	// remember to check the char size on the server
+	// printf("Limit of input number: %d\n", BITSIZE*32);
+
+	while (curr < BITSIZE*32) {
+
 		// exlcude 0 and 1
 		int segIdx = (curr-2)/32;
 		int bitIdx = (curr-2)%32;
@@ -98,10 +114,10 @@ int main(int argc, char* argv[]) {
 			if(isPerfect(curr)) {
 
 				// update perfect number to manage.c
-				msg_buffer->msg_type = REGISTER_MSG;
+				msg_buffer->msg_type = PERFECT_MSG;
 				msg_buffer->content = curr;
 				msgsnd(msgID, msg_buffer, sizeof(msg_buffer->content),0);
-				printf("Updated perfect number: %d\n", curr);
+				// printf("Updated perfect number: %d\n", curr);
 
 				// update to shared memory
 				shmem->processes[idxOfProcess].numberOfPerfect++;
@@ -113,6 +129,10 @@ int main(int argc, char* argv[]) {
 		}
 		curr++;
 	}
+
+	shmdt(shmem);
+	free(msg_buffer);
+	exit(0);
 
 }
 

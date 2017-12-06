@@ -3,7 +3,6 @@ OR CODE WRITTEN BY OTHER STUDENTS - Hang Jiang*/
 
 // make a make file
 // how multiple signals are handled? not simultaneously, right?
-// different numbers in exit(num)
 // what happen if no exit() in handler? go back to the while loop?
 // adjust some functions
 // add error handling

@@ -12,9 +12,10 @@ OR CODE WRITTEN BY OTHER STUDENTS - Hang Jiang*/
 
 #define MKEY 77700
 #define QKEY 88800
-#define PERFECT_MSG 1
-#define REGISTER_MSG 2
+#define REGISTER_MSG 1
+#define PERFECT_MSG 2
 #define PROCESS_INDEX_MSG 3
+#define BITSIZE 1050000
 
 // struct of each process
 typedef struct process_struct{
@@ -28,12 +29,12 @@ typedef struct process_struct{
 typedef struct sharedMemory_struct{
 
 	// 0 means untested; 1 means tested already in bitmap
-	// int bitmap[1050000]; // final: 2^25 is 33,554,432/32 = 1,048,576
-	int bitmap[100000]; // test 
+	int bitmap[BITSIZE]; // final: 2^25 is 33,554,432/32 = 1,048,576
+	// int bitmap[100000]; // test 
 	int perfectNumsFound[20];
 
 	process_struct processes[20];
-
+	int processNumber; // current processIndex in the array
 	int manager_pid; 
 
 } sharedMemory_struct;
